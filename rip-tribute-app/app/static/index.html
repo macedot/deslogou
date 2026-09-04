@@ -104,6 +104,8 @@
       <a id="finalDownload" download="rip-tribute-final.mp4">Download final video</a>
     </div>
   </div>
+
+  <div id="deployInfo" class="sub" title="" style="margin-top:22px; font-size:11px; color:#6f6c76">version…</div>
 </div>
 
 <script>
@@ -116,6 +118,18 @@ const phase2 = $("phase2"), intro = $("intro"), gap = $("gap");
 const mergeBtn = $("mergeBtn"), finalResult = $("finalResult"), finalPlayer = $("finalPlayer"), finalDownload = $("finalDownload");
 let photoUrl = null;
 let tributeId = null;
+
+// Deployment identity: confirms which image is running and that the
+// mounted template/intro are in place.
+fetch("/api/version").then(r => r.json()).then(v => {
+  const el = document.getElementById("deployInfo");
+  const ver = v.version === "dev" ? "dev build" : "v " + v.version.slice(0, 7);
+  el.textContent = `${ver} · template ${v.template_ok ? "ok" : "MISSING"} · intro ${v.intro_ok ? "ok" : "MISSING"}`;
+  el.title = v.version;
+  el.style.color = v.template_ok && v.intro_ok ? "#6f6c76" : "#f28b82";
+}).catch(() => {
+  document.getElementById("deployInfo").textContent = "version unknown";
+});
 
 function setStatus(msg, isError = false, busy = false) {
   status.className = isError ? "error" : "";

@@ -17,6 +17,7 @@ from . import render, wiki
 BASE_DIR = Path(__file__).resolve().parent.parent
 GENERATED_DIR = Path(os.environ.get("GENERATED_DIR", BASE_DIR / "generated"))
 GENERATED_DIR.mkdir(parents=True, exist_ok=True)
+APP_VERSION = os.environ.get("APP_VERSION", "dev")
 
 app = FastAPI(title="RIP Tribute", description="Memorial tribute videos from a person's name")
 
@@ -42,6 +43,18 @@ def _today() -> str:
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(Path(__file__).parent / "static" / "index.html")
+
+
+@app.get("/api/version")
+def version() -> dict:
+    """Deployment identity: which build is running and whether the mounted
+    template/intro files are in place — used to confirm the right image
+    was pushed and deployed."""
+    return {
+        "version": APP_VERSION,
+        "template_ok": render.PRERENDER.is_file(),
+        "intro_ok": render.INTRO_PATH.is_file(),
+    }
 
 
 @app.post("/api/lookup")
