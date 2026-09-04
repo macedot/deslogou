@@ -22,6 +22,7 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageStat
 
 PRERENDER = Path(os.environ.get("PRERENDER_PATH", "/data/prerender.mp4"))
+INTRO_PATH = Path(os.environ.get("INTRO_PATH", "/data/intro.mp4"))
 FRAME_W, FRAME_H = 1920, 1080
 MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024
 ALLOWED_PHOTO_HOSTS = ("upload.wikimedia.org",)  # keep SSRF out: only Wikimedia sources

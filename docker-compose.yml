@@ -4,8 +4,10 @@ services:
     build: ./rip-tribute-app
     environment:
       PRERENDER_PATH: /data/prerender.mp4
+      INTRO_PATH: /data/intro.mp4
     volumes:
       - ./tribute-prerender.mp4:/data/prerender.mp4:ro
+      - ./intro.mp4:/data/intro.mp4:ro
       - generated:/srv/generated
     ports:
       - "8000:8000"

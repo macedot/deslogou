@@ -11,11 +11,13 @@ Built with FastAPI + Pillow + ffmpeg.
 ## Repo layout
 
 - `tribute-prerender.mp4` — the pre-rendered black+theme template. **Not part
-  of the Docker image**; it is mounted into the container at runtime
+  of the Docker image**; mounted into the container at runtime
   (`PRERENDER_PATH`).
+- `intro.mp4` — the provided intro clip, placed **before** the tribute by the
+  MERGE option. Also not in the image; mounted at runtime (`INTRO_PATH`).
 - `rip-tribute-app/` — the service (built by `Dockerfile` and the GitHub
   Action, which publishes the image to `ghcr.io/macedot/deslogou`).
-- `docker-compose.yml` — wires image + template + video storage together.
+- `docker-compose.yml` — wires image + template + intro + video storage.
 
 ## Run locally (Docker Compose)
 
@@ -43,13 +45,14 @@ PRERENDER_PATH=../tribute-prerender.mp4 .venv/bin/uvicorn app.main:app --port 80
 |---|---|---|
 | `POST /api/lookup` | `{"name": "Chico Anysio"}` | `{name, photo_url, page_url, lang}` |
 | `POST /api/render` *(phase 1)* | `{"name": "...", "date": "DD/MM/YYYY?", "photo_url": "...?", "fade": 1.5?}` | `{video_url, file, duration, audio_mean_db, frame_luma, validated: true}` |
-| `POST /api/merge` *(phase 2)* | multipart: `intro` (video file), `tribute_id` (from phase 1), `gap` (seconds, 0–10, default 1) | `{video_url, file, duration, audio_mean_db, frame_luma, validated: true}` |
+| `POST /api/merge` *(phase 2)* | multipart: `intro` (optional video file), `tribute_id` (from phase 1), `gap` (seconds, 0–10, default 1) | `{video_url, file, duration, audio_mean_db, frame_luma, validated: true}` |
 | `GET /video/{id}.mp4` | — | tribute (`{id}`) or final (`final_{id}`) mp4 |
 
-Phase 2 normalizes any intro clip (resolution, fps, codec — audio optional,
-silence is synthesized if missing) to 1920x1080, then concatenates
-intro + black gap + tribute and validates the result the same way phase 1
-does.
+Phase 2 appends the tribute after an intro clip. When `intro` is omitted, the
+provided clip (`INTRO_PATH`) is used; an uploaded clip overrides it. The intro
+is normalized to 1920x1080 (resolution, fps, codec — audio optional, silence
+is synthesized if missing), then intro + black gap + tribute are concatenated
+and validated.
 
 `photo_url` is optional; when omitted the server looks the photo up on
 Wikipedia (pt first, then en). When provided it must be an
@@ -78,6 +81,7 @@ served, and the API returns a 500 explaining why:
 | Variable | Default | Purpose |
 |---|---|---|
 | `PRERENDER_PATH` | `/data/prerender.mp4` | Where the pre-rendered template lives. **Must point to `tribute-prerender.mp4`** — renders fail otherwise. |
+| `INTRO_PATH` | `/data/intro.mp4` | The provided intro clip used by MERGE when no clip is uploaded. |
 | `GENERATED_DIR` | `/srv/generated` (in image: app-adjacent) | Where rendered videos are written. Mount a volume here for persistence. |
 
 ## Deploy notes

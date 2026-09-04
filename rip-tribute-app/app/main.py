@@ -93,9 +93,13 @@ def render_video(req: RenderRequest) -> dict:
 
 
 @app.post("/api/merge")
-async def merge(intro: UploadFile = File(...), tribute_id: str = Form(...),
+async def merge(intro: UploadFile | None = File(None), tribute_id: str = Form(...),
                 gap: float = Form(1.0)) -> dict:
-    """Phase 2: append a validated tribute (from phase 1) after an intro clip."""
+    """Phase 2: append a validated tribute (from phase 1) after an intro clip.
+
+    The intro clip is the one provided with the deployment (INTRO_PATH) when
+    no upload is sent; an uploaded clip overrides it.
+    """
     if not re.fullmatch(r"[0-9a-f]{32}", tribute_id):
         raise HTTPException(status_code=422, detail="tribute_id must be the id from /api/render")
     tribute = GENERATED_DIR / f"{tribute_id}.mp4"
@@ -105,19 +109,25 @@ async def merge(intro: UploadFile = File(...), tribute_id: str = Form(...),
         raise HTTPException(status_code=422, detail="gap must be between 0 and 10 seconds")
 
     with tempfile.TemporaryDirectory() as tmp:
-        intro_path = Path(tmp) / "intro"
-        size = 0
-        with open(intro_path, "wb") as fh:
-            while chunk := await intro.read(1 << 20):
-                size += len(chunk)
-                if size > render.INTRO_MAX_BYTES:
-                    raise HTTPException(status_code=413, detail="Intro video exceeds 200MB.")
-                fh.write(chunk)
-
-        try:
-            intro_duration, _ = render.validate_intro(intro_path)
-        except render.IntroError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if intro is not None and intro.filename:
+            intro_path = Path(tmp) / "intro"
+            size = 0
+            with open(intro_path, "wb") as fh:
+                while chunk := await intro.read(1 << 20):
+                    size += len(chunk)
+                    if size > render.INTRO_MAX_BYTES:
+                        raise HTTPException(status_code=413, detail="Intro video exceeds 200MB.")
+                    fh.write(chunk)
+            try:
+                intro_duration, _ = render.validate_intro(intro_path)
+            except render.IntroError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+        else:
+            intro_path = render.INTRO_PATH
+            try:
+                intro_duration, _ = render.validate_intro(intro_path)
+            except render.IntroError as exc:
+                raise HTTPException(status_code=500, detail=str(exc)) from exc
 
         out = GENERATED_DIR / f"final_{uuid.uuid4().hex}.mp4"
         try:

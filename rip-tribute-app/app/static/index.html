@@ -25,6 +25,13 @@
   }
   input:focus { outline: none; border-color: #6c6c78; }
   .row { display: flex; gap: 10px; margin-top: 22px; }
+  .choice {
+    flex: 1; display: flex; align-items: center; gap: 6px; margin: 0;
+    font-size: 13px; color: #e8e6e3; text-transform: none; letter-spacing: 0;
+    background: #0d0d0f; border: 1px solid #34343c; border-radius: 8px;
+    padding: 9px 10px; cursor: pointer;
+  }
+  .choice input { width: auto; }
   button {
     flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #34343c;
     background: #232329; color: #e8e6e3; font-size: 15px; cursor: pointer;
@@ -81,8 +88,12 @@
   </div>
 
   <div id="phase2" style="display:none">
-    <label for="intro">Phase 2 — your intro clip</label>
-    <input type="file" id="intro" accept="video/mp4,video/quicktime,video/webm">
+    <label>Phase 2 — merge</label>
+    <div class="row" style="margin-top:4px">
+      <label class="choice"><input type="radio" name="introsrc" value="provided" checked> Provided intro video</label>
+      <label class="choice"><input type="radio" name="introsrc" value="upload"> Upload clip</label>
+    </div>
+    <input type="file" id="intro" accept="video/mp4,video/quicktime,video/webm" style="display:none">
     <label for="gap">Gap between intro and tribute (seconds)</label>
     <input type="number" id="gap" value="1" min="0" max="10" step="0.5">
     <div class="row">
@@ -168,18 +179,23 @@ renderBtn.addEventListener("click", async () => {
 });
 
 intro.addEventListener("change", () => {
-  mergeBtn.disabled = !tributeId || !intro.files.length;
+  mergeBtn.disabled = !tributeId || (introSource() === "upload" && !intro.files.length);
 });
+
+function introSource() {
+  return document.querySelector('input[name="introsrc"]:checked').value;
+}
 
 mergeBtn.addEventListener("click", async () => {
   if (!tributeId) { setStatus("Generate the tribute video first.", true); return; }
-  if (!intro.files.length) { setStatus("Choose your intro clip first.", true); return; }
+  const uploadMode = introSource() === "upload";
+  if (uploadMode && !intro.files.length) { setStatus("Choose your intro clip first.", true); return; }
   findBtn.disabled = renderBtn.disabled = mergeBtn.disabled = true;
   finalResult.style.display = "none";
-  setStatus("Merging final video...", false, true);
+  setStatus(uploadMode ? "Merging final video..." : "Merging final video with the provided intro...", false, true);
   try {
     const form = new FormData();
-    form.append("intro", intro.files[0]);
+    if (uploadMode) form.append("intro", intro.files[0]);
     form.append("tribute_id", tributeId);
     form.append("gap", gap.value || "1");
     const resp = await fetch("/api/merge", { method: "POST", body: form });
@@ -194,7 +210,7 @@ mergeBtn.addEventListener("click", async () => {
     setStatus(err.message, true);
   } finally {
     findBtn.disabled = renderBtn.disabled = false;
-    mergeBtn.disabled = !tributeId || !intro.files.length;
+    mergeBtn.disabled = !tributeId || (introSource() === "upload" && !intro.files.length);
   }
 });
 </script>
