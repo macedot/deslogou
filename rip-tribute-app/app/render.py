@@ -1,10 +1,12 @@
 """Tribute video rendering: photo + caption -> 10.55s mp4 over the black+theme template.
 
-Requires ffmpeg/ffprobe on PATH and Pillow installed.
+Requires ffmpeg/ffprobe on PATH and Pillow installed. The pre-rendered
+black+theme template is NOT bundled with the app: point PRERENDER_PATH at it.
 """
 
 import datetime
 import json
+import os
 import subprocess
 import tempfile
 import urllib.error
@@ -13,8 +15,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 
-ASSETS = Path(__file__).resolve().parent / "assets"
-PRERENDER = ASSETS / "prerender.mp4"
+PRERENDER = Path(os.environ.get("PRERENDER_PATH", "/data/prerender.mp4"))
 FRAME_W, FRAME_H = 1920, 1080
 MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024
 ALLOWED_PHOTO_HOSTS = ("upload.wikimedia.org",)  # keep SSRF out: only Wikimedia sources
@@ -112,9 +113,15 @@ def _probe_duration(path: Path) -> float:
 
 
 def make_tribute(name: str, image: Path, out: Path, date: str | None = None,
-                 fade: float = 1.5, prerender: Path = PRERENDER) -> Path:
+                 fade: float = 1.5, prerender: Path | None = None) -> Path:
     if not 0.2 <= fade <= 5:
         raise ValueError("fade must be between 0.2 and 5 seconds")
+    prerender = Path(prerender or PRERENDER)
+    if not prerender.is_file():
+        raise FileNotFoundError(
+            f"Pre-rendered template not found at {prerender}. "
+            "Set PRERENDER_PATH to the tribute-prerender.mp4 location."
+        )
     date = date or datetime.datetime.now().strftime("%d/%m/%Y")
     caption = f"RIP: {name} {date}"
     annotated = _annotate(Path(image), caption)

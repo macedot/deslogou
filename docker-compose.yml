@@ -2,10 +2,13 @@ services:
   rip-tribute:
     image: ghcr.io/macedot/deslogou:latest
     build: ./rip-tribute-app
+    environment:
+      PRERENDER_PATH: /data/prerender.mp4
+    volumes:
+      - ./tribute-prerender.mp4:/data/prerender.mp4:ro
+      - generated:/srv/generated
     ports:
       - "8000:8000"
-    volumes:
-      - generated:/srv/generated
     restart: unless-stopped
 
 volumes:
