@@ -17,40 +17,38 @@
     background: #17171b; border: 1px solid #2a2a30;
   }
   h1 { margin: 0 0 4px; font-size: 26px; font-weight: 600; letter-spacing: .5px; }
-  .sub { margin: 0 0 24px; color: #9a97a0; font-size: 14px; }
-  label { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #9a97a0; margin: 14px 0 6px; }
+  .sub { margin: 0 0 20px; color: #9a97a0; font-size: 14px; }
+  .step { margin: 18px 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #9a97a0; }
+  label { display: block; font-size: 12px; color: #9a97a0; margin: 10px 0 6px; }
   input {
     width: 100%; padding: 11px 12px; border-radius: 8px; font-size: 15px;
     background: #0d0d0f; border: 1px solid #34343c; color: #e8e6e3;
   }
   input:focus { outline: none; border-color: #6c6c78; }
-  .row { display: flex; gap: 10px; margin-top: 22px; }
-  .choice {
-    flex: 1; display: flex; align-items: center; gap: 6px; margin: 0;
-    font-size: 13px; color: #e8e6e3; text-transform: none; letter-spacing: 0;
-    background: #0d0d0f; border: 1px solid #34343c; border-radius: 8px;
-    padding: 9px 10px; cursor: pointer;
-  }
-  .choice input { width: auto; }
+  input[type="file"] { padding: 8px; font-size: 13px; }
+  .row { display: flex; gap: 10px; margin-top: 16px; }
   button {
     flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #34343c;
     background: #232329; color: #e8e6e3; font-size: 15px; cursor: pointer;
+    text-transform: uppercase; letter-spacing: .5px; font-weight: 600;
   }
   button:hover:not(:disabled) { background: #2d2d35; }
   button:disabled { opacity: .45; cursor: not-allowed; }
-  button.primary { background: #3b3b46; border-color: #4a4a58; font-weight: 600; }
-  #preview { display: none; margin-top: 20px; text-align: center; }
+  button.primary { background: #3b3b46; border-color: #4a4a58; }
+  #preview { display: none; margin-top: 16px; text-align: center; }
   #preview img {
-    max-width: 100%; max-height: 260px; border-radius: 10px;
+    max-width: 100%; max-height: 240px; border-radius: 10px;
     border: 1px solid #2a2a30;
   }
   #preview .src { display: block; margin-top: 8px; font-size: 12px; }
   #preview .src a { color: #8ab4f8; text-decoration: none; }
+  #altPhoto { display: none; margin-top: 16px; padding-top: 14px; border-top: 1px solid #2a2a30; }
   #status { margin-top: 14px; font-size: 14px; min-height: 20px; }
   #status.error { color: #f28b82; }
-  #result { display: none; margin-top: 20px; }
-  #result video { width: 100%; border-radius: 10px; border: 1px solid #2a2a30; }
-  #result a { display: inline-block; margin-top: 10px; color: #8ab4f8; font-size: 14px; text-decoration: none; }
+  .outLabel { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #9a97a0; margin: 18px 0 8px; }
+  #result { display: none; margin-top: 6px; }
+  #result video { width: 100%; border-radius: 10px; border: 1px solid #2a2a30; display: block; }
+  #result a { display: inline-block; margin-top: 8px; color: #8ab4f8; font-size: 14px; text-decoration: none; }
   .spinner {
     display: inline-block; width: 14px; height: 14px; vertical-align: -2px; margin-right: 6px;
     border: 2px solid #555; border-top-color: #bbb; border-radius: 50%;
@@ -62,16 +60,15 @@
 <body>
 <div class="card">
   <h1>RIP Tribute</h1>
-  <p class="sub">Type a person's name — get a memorial video with their photo and a sad theme.</p>
+  <p class="sub">A memorial video from a person's name: their photo, the sad theme, merged after your intro clip.</p>
 
+  <div class="step">1 · Search photo</div>
   <label for="name">Person's name</label>
   <input id="name" placeholder="e.g. Chico Anysio" autocomplete="off">
-  <label for="date">Date (optional)</label>
+  <label for="date">Date for the caption (optional)</label>
   <input id="date" placeholder="DD/MM/YYYY — defaults to today" autocomplete="off">
-
   <div class="row">
-    <button id="findBtn">Find photo</button>
-    <button id="renderBtn" class="primary">Generate video</button>
+    <button id="findBtn">1 · Search photo</button>
   </div>
 
   <div id="preview">
@@ -79,30 +76,29 @@
     <span class="src" id="src"></span>
   </div>
 
+  <div id="altPhoto">
+    <div class="step">Not the right photo? Use another one</div>
+    <label for="photoUrl">Photo URL</label>
+    <input id="photoUrl" placeholder="https://… (optional)" autocomplete="off">
+    <label for="photoFile">…or upload a photo</label>
+    <input type="file" id="photoFile" accept="image/jpeg,image/png,image/webp">
+  </div>
+
+  <div class="step">2 · Render</div>
+  <div class="row">
+    <button id="renderBtn" class="primary">2 · Render</button>
+  </div>
+  <p class="sub" id="renderHint" style="display:none; margin:10px 0 0">Renders the tribute and automatically merges it after the provided intro.</p>
+
   <div id="status"></div>
 
   <div id="result">
+    <span class="outLabel">Tribute (validated)</span>
     <video id="player" controls></video>
-    <a id="download" download="rip-tribute.mp4">Download tribute video</a>
-    <p class="sub" style="margin-top:14px">Validate the tribute above. Happy with it? Add your intro clip and build the final video.</p>
-  </div>
-
-  <div id="phase2">
-    <label>Phase 2 — merge</label>
-    <div class="row" style="margin-top:4px">
-      <label class="choice"><input type="radio" name="introsrc" value="provided" checked> Provided intro video</label>
-      <label class="choice"><input type="radio" name="introsrc" value="upload"> Upload clip</label>
-    </div>
-    <input type="file" id="intro" accept="video/mp4,video/quicktime,video/webm" style="display:none">
-    <label for="gap">Gap between intro and tribute (seconds)</label>
-    <input type="number" id="gap" value="1" min="0" max="10" step="0.5">
-    <div class="row">
-      <button id="mergeBtn" class="primary" disabled>MERGE WITH INTRO</button>
-    </div>
-    <div id="finalResult" style="display:none; margin-top:20px">
-      <video id="finalPlayer" controls></video>
-      <a id="finalDownload" download="rip-tribute-final.mp4">Download final video</a>
-    </div>
+    <a id="download" download="rip-tribute.mp4">Download tribute</a>
+    <span class="outLabel">Final — intro + tribute (validated)</span>
+    <video id="finalPlayer" controls></video>
+    <a id="finalDownload" download="rip-tribute-final.mp4">Download final video</a>
   </div>
 
   <div id="deployInfo" class="sub" title="" style="margin-top:22px; font-size:11px; color:#6f6c76">version…</div>
@@ -113,11 +109,11 @@ const $ = id => document.getElementById(id);
 const name = $("name"), date = $("date");
 const findBtn = $("findBtn"), renderBtn = $("renderBtn");
 const preview = $("preview"), photo = $("photo"), src = $("src");
-const status = $("status"), result = $("result"), player = $("player"), download = $("download");
-const phase2 = $("phase2"), intro = $("intro"), gap = $("gap");
-const mergeBtn = $("mergeBtn"), finalResult = $("finalResult"), finalPlayer = $("finalPlayer"), finalDownload = $("finalDownload");
-let photoUrl = null;
-let tributeId = null;
+const altPhoto = $("altPhoto"), photoUrl = $("photoUrl"), photoFile = $("photoFile");
+const status = $("status"), renderHint = $("renderHint");
+const result = $("result"), player = $("player"), download = $("download");
+const finalPlayer = $("finalPlayer"), finalDownload = $("finalDownload");
+let foundPhotoUrl = null;   // photo found by the search
 
 // Deployment identity: confirms which image is running and that the
 // mounted template/intro are in place.
@@ -147,85 +143,86 @@ async function api(path, body) {
   return data;
 }
 
+// Photo the user chose to override the search result (file takes precedence).
+function chosenPhoto() {
+  if (photoFile.files.length) return { file: photoFile.files[0] };
+  if (photoUrl.value.trim()) return { url: photoUrl.value.trim() };
+  return null;
+}
+
+function showPreview(srcUrl, caption) {
+  photo.src = srcUrl;
+  src.innerHTML = caption;
+  preview.style.display = "block";
+}
+
 findBtn.addEventListener("click", async () => {
   if (name.value.trim().length < 2) { setStatus("Type a name first.", true); return; }
   findBtn.disabled = renderBtn.disabled = true;
-  photoUrl = null; preview.style.display = "none"; result.style.display = "none";
+  photoUrl.value = ""; photoFile.value = "";
   setStatus("Searching Wikipedia...", false, true);
   try {
     const found = await api("/api/lookup", { name: name.value });
-    photoUrl = found.photo_url;
-    photo.src = photoUrl;
-    src.innerHTML = found.page_url
-      ? `from <a href="${found.page_url}" target="_blank" rel="noopener">Wikipedia (${found.lang})</a>`
-      : `from Wikipedia (${found.lang})`;
-    preview.style.display = "block";
-    setStatus("");
+    foundPhotoUrl = found.photo_url;
+    showPreview(found.photo_url,
+      found.page_url
+        ? `from <a href="${found.page_url}" target="_blank" rel="noopener">Wikipedia (${found.lang})</a>`
+        : `from Wikipedia (${found.lang})`);
+    setStatus("Photo found.");
   } catch (err) {
-    setStatus(err.message, true);
+    foundPhotoUrl = null;
+    preview.style.display = "none";
+    setStatus(err.message + " You can provide a photo below.", true);
   } finally {
-    findBtn.disabled = renderBtn.disabled = false;
+    renderBtn.disabled = false;
+    altPhoto.style.display = "block";   // available after the search, success or not
+    renderHint.style.display = "block";
+  }
+});
+
+photoUrl.addEventListener("change", () => {
+  if (photoUrl.value.trim()) {
+    photoFile.value = "";
+    showPreview(photoUrl.value.trim(), "custom URL");
+  }
+});
+
+photoFile.addEventListener("change", () => {
+  if (photoFile.files.length) {
+    photoUrl.value = "";
+    showPreview(URL.createObjectURL(photoFile.files[0]), "uploaded file");
   }
 });
 
 renderBtn.addEventListener("click", async () => {
   if (name.value.trim().length < 2) { setStatus("Type a name first.", true); return; }
-  findBtn.disabled = renderBtn.disabled = mergeBtn.disabled = true;
-  result.style.display = "none"; finalResult.style.display = "none";
-  setStatus("Rendering video...", false, true);
-  try {
-    const body = { name: name.value };
-    if (date.value.trim()) body.date = date.value.trim();
-    if (photoUrl) body.photo_url = photoUrl;
-    const done = await api("/api/render", body);
-    tributeId = done.file.replace(/\.mp4$/, "");
-    player.src = done.video_url;
-    download.href = done.video_url;
-    result.style.display = "block";
-    phase2.style.display = "block";
-    player.play().catch(() => {});
-    setStatus("Tribute validated: " + done.duration + "s, theme at " + done.audio_mean_db + " dB.");
-  } catch (err) {
-    setStatus(err.message, true);
-  } finally {
-    findBtn.disabled = renderBtn.disabled = false;
-    mergeBtn.disabled = !tributeId || (introSource() === "upload" && !intro.files.length);
-  }
-});
-
-intro.addEventListener("change", () => {
-  mergeBtn.disabled = !tributeId || (introSource() === "upload" && !intro.files.length);
-});
-
-function introSource() {
-  return document.querySelector('input[name="introsrc"]:checked').value;
-}
-
-mergeBtn.addEventListener("click", async () => {
-  if (!tributeId) { setStatus("Generate the tribute video first.", true); return; }
-  const uploadMode = introSource() === "upload";
-  if (uploadMode && !intro.files.length) { setStatus("Choose your intro clip first.", true); return; }
-  findBtn.disabled = renderBtn.disabled = mergeBtn.disabled = true;
-  finalResult.style.display = "none";
-  setStatus(uploadMode ? "Merging final video..." : "Merging final video with the provided intro...", false, true);
+  findBtn.disabled = renderBtn.disabled = true;
+  result.style.display = "none";
+  setStatus("Rendering tribute...", false, true);
   try {
     const form = new FormData();
-    if (uploadMode) form.append("intro", intro.files[0]);
-    form.append("tribute_id", tributeId);
-    form.append("gap", gap.value || "1");
-    const resp = await fetch("/api/merge", { method: "POST", body: form });
+    form.append("name", name.value);
+    if (date.value.trim()) form.append("date", date.value.trim());
+    const chosen = chosenPhoto();
+    if (chosen && chosen.file) form.append("photo", chosen.file);
+    else if (chosen && chosen.url) form.append("photo_url", chosen.url);
+    else if (foundPhotoUrl) form.append("photo_url", foundPhotoUrl);
+    const resp = await fetch("/api/render", { method: "POST", body: form });
     const done = await resp.json().catch(() => ({}));
     if (!resp.ok) throw new Error(done.detail || resp.statusText);
-    finalPlayer.src = done.video_url;
-    finalDownload.href = done.video_url;
-    finalResult.style.display = "block";
+
+    setStatus("Merging with intro...", false, true);
+    player.src = done.tribute.video_url;
+    download.href = done.tribute.video_url;
+    finalPlayer.src = done.final.video_url;
+    finalDownload.href = done.final.video_url;
+    result.style.display = "block";
     finalPlayer.play().catch(() => {});
-    setStatus("Final video validated: " + done.duration + "s total.");
+    setStatus(`Done — tribute ${done.tribute.duration}s, final ${done.final.duration}s (validated).`);
   } catch (err) {
     setStatus(err.message, true);
   } finally {
     findBtn.disabled = renderBtn.disabled = false;
-    mergeBtn.disabled = !tributeId || (introSource() === "upload" && !intro.files.length);
   }
 });
 </script>

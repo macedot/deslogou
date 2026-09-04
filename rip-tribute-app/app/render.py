@@ -10,9 +10,11 @@ picture not black) so a broken merge can never be served.
 """
 
 import datetime
+import ipaddress
 import json
 import os
 import re
+import socket
 import subprocess
 import tempfile
 import urllib.error
@@ -25,7 +27,6 @@ PRERENDER = Path(os.environ.get("PRERENDER_PATH", "/data/prerender.mp4"))
 INTRO_PATH = Path(os.environ.get("INTRO_PATH", "/data/intro.mp4"))
 FRAME_W, FRAME_H = 1920, 1080
 MAX_DOWNLOAD_BYTES = 25 * 1024 * 1024
-ALLOWED_PHOTO_HOSTS = ("upload.wikimedia.org",)  # keep SSRF out: only Wikimedia sources
 FONT_CANDIDATES = [
     "/System/Library/Fonts/Supplemental/Arial.ttf",
     "/System/Library/Fonts/Helvetica.ttc",
@@ -177,12 +178,8 @@ def validate_output(path: Path, expected_duration: float) -> dict:
 
 
 def download_photo(url: str, dest_dir: str) -> Path:
-    """Download a photo from an allowed host and sanity-check it with Pillow."""
-    from urllib.parse import urlparse
-
-    host = urlparse(url).hostname or ""
-    if host not in ALLOWED_PHOTO_HOSTS:
-        raise PhotoError(f"photo_url must be a {ALLOWED_PHOTO_HOSTS[0]} URL")
+    """Download a photo from any public http(s) URL and sanity-check it."""
+    _assert_public_url(url)
     req = urllib.request.Request(url, headers={"User-Agent": "rip-tribute-app/1.0"})
     dest = Path(dest_dir) / "photo"
     try:
@@ -195,18 +192,43 @@ def download_photo(url: str, dest_dir: str) -> Path:
                 fh.write(chunk)
     except (urllib.error.URLError, OSError) as exc:
         raise PhotoError(f"Could not download photo: {exc}") from exc
+    validate_photo_file(dest)
+    return dest
 
+
+def validate_photo_file(path: Path) -> None:
+    """Ensure a photo file is a real image Pillow can work with."""
     try:
-        with Image.open(dest) as probe:
+        with Image.open(path) as probe:
             probe.verify()
-        with Image.open(dest) as probe:
+        with Image.open(path) as probe:
             if probe.format not in ("JPEG", "PNG", "WEBP"):
                 raise PhotoError(f"Unsupported photo format: {probe.format}")
     except PhotoError:
         raise
     except Exception as exc:
-        raise PhotoError(f"Downloaded file is not a usable image: {exc}") from exc
-    return dest
+        raise PhotoError(f"File is not a usable image: {exc}") from exc
+
+
+def _assert_public_url(url: str) -> None:
+    """SSRF guard: only http(s) URLs whose host resolves to public addresses."""
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise PhotoError("Photo URL must be http(s).")
+    host = parsed.hostname
+    if not host:
+        raise PhotoError("Invalid photo URL.")
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror as exc:
+        raise PhotoError(f"Could not resolve photo host '{host}'.") from exc
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if (ip.is_private or ip.is_loopback or ip.is_link_local
+                or ip.is_reserved or ip.is_multicast or ip.is_unspecified):
+            raise PhotoError("Photo URL points to a private address.")
 
 
 def _annotate(image_path: Path, caption: str) -> Path:

@@ -1,10 +1,16 @@
 # RIP Tribute
 
 A shareable web service that turns a person's name into a memorial tribute
-video in **two phases**: phase 1 renders the tribute (their Wikipedia photo
-dissolving in over the black+theme pre-render, captioned "RIP: \<Name\>
-\<date\>"); you validate it; phase 2 merges it after an intro clip you upload
-into the final video.
+video. The flow is two numbered buttons:
+
+1. **SEARCH PHOTO** — finds the person's photo on Wikipedia (pt, then en).
+   After the search — success or not — a custom photo can be supplied via
+   **URL or file upload**.
+2. **RENDER** — renders the tribute (photo crossfade, caption
+   "RIP: \<Name\> \<date\>", sad Chaves theme over the pre-rendered template)
+   and then **automatically merges it after the provided intro clip** with a
+   configurable gap. Both the tribute and the final video are validated and
+   returned.
 
 Built with FastAPI + Pillow + ffmpeg.
 
@@ -13,9 +19,9 @@ Built with FastAPI + Pillow + ffmpeg.
 - `tribute-prerender.mp4` — the pre-rendered black+theme template. **Not part
   of the Docker image**; mounted into the container at runtime
   (`PRERENDER_PATH`).
-- `intro.mp4` — the provided intro clip: news-clip visuals with the WhatsApp
-  voice note as the only audio (1s in, black tail while it finishes). Also
-  not in the image; mounted at runtime (`INTRO_PATH`).
+- `intro.mp4` — the provided intro clip placed **before** the tribute (news
+  clip with the WhatsApp voice note as its only audio). Also mounted at
+  runtime (`INTRO_PATH`).
 - `rip-tribute-app/` — the service (built by `Dockerfile` and the GitHub
   Action, which publishes the image to `ghcr.io/macedot/deslogou`).
 - `docker-compose.yml` — wires image + template + intro + video storage.
@@ -26,71 +32,62 @@ Built with FastAPI + Pillow + ffmpeg.
 docker compose up --build
 ```
 
-Open http://localhost:8000 — type a name, confirm the photo found on
-Wikipedia, generate, play, download.
+Open http://localhost:8000 — type a name, confirm the photo, hit Render.
 
 ## Run locally without Docker
 
 Requires Python 3.10+ and ffmpeg/ffprobe on PATH (`brew install ffmpeg`).
-The template path must be provided:
+The template/intro paths must be provided:
 
 ```bash
 cd rip-tribute-app
 python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
-PRERENDER_PATH=../tribute-prerender.mp4 .venv/bin/uvicorn app.main:app --port 8000
+PRERENDER_PATH=../tribute-prerender.mp4 INTRO_PATH=../intro.mp4 \
+  .venv/bin/uvicorn app.main:app --port 8000
 ```
 
 ## API
 
 | Endpoint | Body | Result |
 |---|---|---|
-| `POST /api/lookup` | `{"name": "Chico Anysio"}` | `{name, photo_url, page_url, lang}` |
-| `POST /api/render` *(phase 1)* | `{"name": "...", "date": "DD/MM/YYYY?", "photo_url": "...?", "fade": 1.5?}` | `{video_url, file, duration, audio_mean_db, frame_luma, validated: true}` |
-| `POST /api/merge` *(phase 2)* | multipart: `intro` (optional video file), `tribute_id` (from phase 1), `gap` (seconds, 0–10, default 1) | `{video_url, file, duration, audio_mean_db, frame_luma, validated: true}` |
+| `POST /api/lookup` | JSON `{"name": "Chico Anysio"}` | `{name, photo_url, page_url, lang}` |
+| `POST /api/render` | multipart: `name`, `date?` (DD/MM/YYYY), `photo_url?`, `fade?` (s), `photo?` (image file) | `{tribute: {...}, final: {...}, validated: true}` — each of `tribute`/`final` carries `video_url`, `file`, `duration`, `audio_mean_db`, `frame_luma` |
 | `GET /video/{id}.mp4` | — | tribute (`{id}`) or final (`final_{id}`) mp4 |
+| `GET /api/version` | — | `{version, template_ok, intro_ok}` — deployment identity |
 
-Phase 2 appends the tribute after an intro clip. When `intro` is omitted, the
-provided clip (`INTRO_PATH`) is used; an uploaded clip overrides it. The intro
-is normalized to 1920x1080 (resolution, fps, codec — audio optional, silence
-is synthesized if missing), then intro + black gap + tribute are concatenated
-and validated.
-
-`photo_url` is optional; when omitted the server looks the photo up on
-Wikipedia (pt first, then en). When provided it must be an
-`upload.wikimedia.org` URL — this keeps the server from being tricked into
-fetching internal addresses (SSRF).
-
-### Validation guarantees
-
-Both phases are verified twice; a file that fails any check is deleted, never
-served, and the API returns a 500 explaining why:
-
-- **Template (before rendering)** — `PRERENDER_PATH` must exist and be a
-  1920x1080 mp4 containing *both* a video and an audio stream.
-- **Tribute output (after phase 1)** — the finished file must have both
-  streams, match the template's duration (±0.5s), have audible theme music
-  (mean volume above −60 dB in the post-dissolve window), and a non-black
-  picture (the photo overlay actually happened).
-- **Intro (before merge)** — must contain a video stream and be ≤ 180s /
-  200MB.
-- **Final output (after phase 2)** — both streams present, duration matches
-  intro + gap + tribute (±1s), the theme is audible and the picture non-black
-  inside the tribute region.
+The photo source order in `/api/render` is: **uploaded file → photo_url →
+Wikipedia lookup**. Any public http(s) URL is accepted (private/internal
+addresses are rejected to prevent SSRF); Wikipedia photos are served from
+`upload.wikimedia.org`.
 
 ## Environment
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `PRERENDER_PATH` | `/data/prerender.mp4` | Where the pre-rendered template lives. **Must point to `tribute-prerender.mp4`** — renders fail otherwise. |
-| `INTRO_PATH` | `/data/intro.mp4` | The provided intro clip used by MERGE when no clip is uploaded. |
-| `GENERATED_DIR` | `/srv/generated` (in image: app-adjacent) | Where rendered videos are written. Mount a volume here for persistence. |
+| `PRERENDER_PATH` | `/data/prerender.mp4` | Pre-rendered template location. Renders fail without it. |
+| `INTRO_PATH` | `/data/intro.mp4` | Provided intro clip placed before the tribute. |
+| `MERGE_GAP` | `1` | Seconds of silent black between intro and tribute (config, not UI). |
+| `GENERATED_DIR` | `/srv/generated` (in image: app-adjacent) | Where rendered videos are written. Mount a volume for persistence. |
+
+## Validation guarantees
+
+Both stages are verified; a file that fails any check is deleted, never
+served, and the API returns a 500 explaining why:
+
+- **Template (before rendering)** — `PRERENDER_PATH` must exist and be a
+  1920x1080 mp4 with both video and audio streams.
+- **Tribute output** — both streams, duration matches the template (±0.5s),
+  audible theme music (> −60 dB post-dissolve), non-black picture.
+- **Intro (before merge)** — has a video stream, ≤ 180s.
+- **Final output** — both streams, duration matches intro + gap + tribute
+  (±1s), theme audible and picture non-black inside the tribute region.
 
 ## Deploy notes
 
-- Any Docker host works: `docker compose up -d`, or run
-  `ghcr.io/macedot/deslogou:latest` directly with the two mounts above.
-- The GHCR image is private (private repo): `docker login ghcr.io` with a
-  `read:packages` token to pull it, or build on the host.
+- Any Docker host: `docker compose up -d`, or run
+  `ghcr.io/macedot/deslogou:latest` with the mounts above.
+- The GHCR image is public; the footer in the UI shows the build version so
+  you can confirm the proper image is deployed.
 - Renders are ephemeral unless `/srv/generated` is a volume.
 - No auth or rate limiting — fine for friends, add a token or `slowapi`
   before exposing publicly.

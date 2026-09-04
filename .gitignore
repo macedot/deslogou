@@ -3,3 +3,4 @@
 *.pyc
 rip-tribute-app/.venv/
 rip-tribute-app/generated/
+.zcode/

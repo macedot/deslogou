@@ -5,6 +5,7 @@ services:
     environment:
       PRERENDER_PATH: /data/prerender.mp4
       INTRO_PATH: /data/intro.mp4
+      MERGE_GAP: 1
     volumes:
       - ./tribute-prerender.mp4:/data/prerender.mp4:ro
       - ./intro.mp4:/data/intro.mp4:ro
