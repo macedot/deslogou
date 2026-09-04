@@ -76,7 +76,22 @@
 
   <div id="result">
     <video id="player" controls></video>
-    <a id="download" download="rip-tribute.mp4">Download video</a>
+    <a id="download" download="rip-tribute.mp4">Download tribute video</a>
+    <p class="sub" style="margin-top:14px">Validate the tribute above. Happy with it? Add your intro clip and build the final video.</p>
+  </div>
+
+  <div id="phase2" style="display:none">
+    <label for="intro">Phase 2 — your intro clip</label>
+    <input type="file" id="intro" accept="video/mp4,video/quicktime,video/webm">
+    <label for="gap">Gap between intro and tribute (seconds)</label>
+    <input type="number" id="gap" value="1" min="0" max="10" step="0.5">
+    <div class="row">
+      <button id="mergeBtn" class="primary">Merge final video</button>
+    </div>
+    <div id="finalResult" style="display:none; margin-top:20px">
+      <video id="finalPlayer" controls></video>
+      <a id="finalDownload" download="rip-tribute-final.mp4">Download final video</a>
+    </div>
   </div>
 </div>
 
@@ -86,7 +101,10 @@ const name = $("name"), date = $("date");
 const findBtn = $("findBtn"), renderBtn = $("renderBtn");
 const preview = $("preview"), photo = $("photo"), src = $("src");
 const status = $("status"), result = $("result"), player = $("player"), download = $("download");
+const phase2 = $("phase2"), intro = $("intro"), gap = $("gap");
+const mergeBtn = $("mergeBtn"), finalResult = $("finalResult"), finalPlayer = $("finalPlayer"), finalDownload = $("finalDownload");
 let photoUrl = null;
+let tributeId = null;
 
 function setStatus(msg, isError = false, busy = false) {
   status.className = isError ? "error" : "";
@@ -127,23 +145,56 @@ findBtn.addEventListener("click", async () => {
 
 renderBtn.addEventListener("click", async () => {
   if (name.value.trim().length < 2) { setStatus("Type a name first.", true); return; }
-  findBtn.disabled = renderBtn.disabled = true;
-  result.style.display = "none";
+  findBtn.disabled = renderBtn.disabled = mergeBtn.disabled = true;
+  result.style.display = "none"; phase2.style.display = "none"; finalResult.style.display = "none";
   setStatus("Rendering video...", false, true);
   try {
     const body = { name: name.value };
     if (date.value.trim()) body.date = date.value.trim();
     if (photoUrl) body.photo_url = photoUrl;
     const done = await api("/api/render", body);
+    tributeId = done.file.replace(/\.mp4$/, "");
     player.src = done.video_url;
     download.href = done.video_url;
     result.style.display = "block";
     player.play().catch(() => {});
-    setStatus("");
+    setStatus("Validated: " + done.duration + "s, theme at " + done.audio_mean_db + " dB. Review it, then merge with your intro below.");
   } catch (err) {
     setStatus(err.message, true);
   } finally {
     findBtn.disabled = renderBtn.disabled = false;
+    mergeBtn.disabled = !tributeId || !intro.files.length;
+  }
+});
+
+intro.addEventListener("change", () => {
+  mergeBtn.disabled = !tributeId || !intro.files.length;
+});
+
+mergeBtn.addEventListener("click", async () => {
+  if (!tributeId) { setStatus("Generate the tribute video first.", true); return; }
+  if (!intro.files.length) { setStatus("Choose your intro clip first.", true); return; }
+  findBtn.disabled = renderBtn.disabled = mergeBtn.disabled = true;
+  finalResult.style.display = "none";
+  setStatus("Merging final video...", false, true);
+  try {
+    const form = new FormData();
+    form.append("intro", intro.files[0]);
+    form.append("tribute_id", tributeId);
+    form.append("gap", gap.value || "1");
+    const resp = await fetch("/api/merge", { method: "POST", body: form });
+    const done = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(done.detail || resp.statusText);
+    finalPlayer.src = done.video_url;
+    finalDownload.href = done.video_url;
+    finalResult.style.display = "block";
+    finalPlayer.play().catch(() => {});
+    setStatus("Final video validated: " + done.duration + "s total.");
+  } catch (err) {
+    setStatus(err.message, true);
+  } finally {
+    findBtn.disabled = renderBtn.disabled = false;
+    mergeBtn.disabled = !tributeId || !intro.files.length;
   }
 });
 </script>

@@ -1,10 +1,12 @@
 # RIP Tribute
 
 A shareable web service that turns a person's name into a memorial tribute
-video: their Wikipedia photo dissolves in, centered on a black screen, with
-the caption "RIP: \<Name\> \<date\>" and the Chaves sad theme playing.
+video in **two phases**: phase 1 renders the tribute (their Wikipedia photo
+dissolving in over the black+theme pre-render, captioned "RIP: \<Name\>
+\<date\>"); you validate it; phase 2 merges it after an intro clip you upload
+into the final video.
 
-Built with FastAPI + Pillow + ffmpeg. Renders a 10.55s 1080p mp4 per request.
+Built with FastAPI + Pillow + ffmpeg.
 
 ## Repo layout
 
@@ -40,8 +42,14 @@ PRERENDER_PATH=../tribute-prerender.mp4 .venv/bin/uvicorn app.main:app --port 80
 | Endpoint | Body | Result |
 |---|---|---|
 | `POST /api/lookup` | `{"name": "Chico Anysio"}` | `{name, photo_url, page_url, lang}` |
-| `POST /api/render` | `{"name": "...", "date": "DD/MM/YYYY?", "photo_url": "...?", "fade": 1.5?}` | `{video_url, file, duration, audio_mean_db, frame_luma, validated: true}` |
-| `GET /video/{id}.mp4` | — | the rendered mp4 |
+| `POST /api/render` *(phase 1)* | `{"name": "...", "date": "DD/MM/YYYY?", "photo_url": "...?", "fade": 1.5?}` | `{video_url, file, duration, audio_mean_db, frame_luma, validated: true}` |
+| `POST /api/merge` *(phase 2)* | multipart: `intro` (video file), `tribute_id` (from phase 1), `gap` (seconds, 0–10, default 1) | `{video_url, file, duration, audio_mean_db, frame_luma, validated: true}` |
+| `GET /video/{id}.mp4` | — | tribute (`{id}`) or final (`final_{id}`) mp4 |
+
+Phase 2 normalizes any intro clip (resolution, fps, codec — audio optional,
+silence is synthesized if missing) to 1920x1080, then concatenates
+intro + black gap + tribute and validates the result the same way phase 1
+does.
 
 `photo_url` is optional; when omitted the server looks the photo up on
 Wikipedia (pt first, then en). When provided it must be an
@@ -50,15 +58,20 @@ fetching internal addresses (SSRF).
 
 ### Validation guarantees
 
-Renders are verified twice; a file that fails either check is deleted, never
+Both phases are verified twice; a file that fails any check is deleted, never
 served, and the API returns a 500 explaining why:
 
 - **Template (before rendering)** — `PRERENDER_PATH` must exist and be a
   1920x1080 mp4 containing *both* a video and an audio stream.
-- **Output (after rendering)** — the finished file must have both streams,
-  match the template's duration (±0.5s), have audible theme music
+- **Tribute output (after phase 1)** — the finished file must have both
+  streams, match the template's duration (±0.5s), have audible theme music
   (mean volume above −60 dB in the post-dissolve window), and a non-black
   picture (the photo overlay actually happened).
+- **Intro (before merge)** — must contain a video stream and be ≤ 180s /
+  200MB.
+- **Final output (after phase 2)** — both streams present, duration matches
+  intro + gap + tribute (±1s), the theme is audible and the picture non-black
+  inside the tribute region.
 
 ## Environment
 

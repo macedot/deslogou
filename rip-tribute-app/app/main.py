@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
@@ -92,11 +92,56 @@ def render_video(req: RenderRequest) -> dict:
     return {"video_url": f"/video/{out.stem}.mp4", "file": out.name, "validated": True, **checks}
 
 
-@app.get("/video/{vid}.mp4")
-def video(vid: str) -> FileResponse:
-    if not re.fullmatch(r"[0-9a-f]{32}", vid):
+@app.post("/api/merge")
+async def merge(intro: UploadFile = File(...), tribute_id: str = Form(...),
+                gap: float = Form(1.0)) -> dict:
+    """Phase 2: append a validated tribute (from phase 1) after an intro clip."""
+    if not re.fullmatch(r"[0-9a-f]{32}", tribute_id):
+        raise HTTPException(status_code=422, detail="tribute_id must be the id from /api/render")
+    tribute = GENERATED_DIR / f"{tribute_id}.mp4"
+    if not tribute.is_file():
+        raise HTTPException(status_code=404, detail="Tribute video not found — generate one first (phase 1).")
+    if not 0 <= gap <= 10:
+        raise HTTPException(status_code=422, detail="gap must be between 0 and 10 seconds")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        intro_path = Path(tmp) / "intro"
+        size = 0
+        with open(intro_path, "wb") as fh:
+            while chunk := await intro.read(1 << 20):
+                size += len(chunk)
+                if size > render.INTRO_MAX_BYTES:
+                    raise HTTPException(status_code=413, detail="Intro video exceeds 200MB.")
+                fh.write(chunk)
+
+        try:
+            intro_duration, _ = render.validate_intro(intro_path)
+        except render.IntroError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        out = GENERATED_DIR / f"final_{uuid.uuid4().hex}.mp4"
+        try:
+            render.merge_with_intro(intro_path, tribute, out, gap=gap)
+            tribute_duration = render.media_duration(tribute)
+            checks = render.validate_merged(out, expected_duration=intro_duration + gap + tribute_duration,
+                                            tribute_starts_at=intro_duration + gap)
+        except (render.IntroError, render.ValidationError) as exc:
+            out.unlink(missing_ok=True)
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        except Exception as exc:
+            out.unlink(missing_ok=True)
+            raise HTTPException(status_code=500, detail=f"Merge failed: {exc}") from exc
+
+    return {"video_url": f"/video/{out.stem}.mp4", "file": out.name, "validated": True, **checks}
+
+
+@app.get("/video/{name}.mp4")
+def video(name: str) -> FileResponse:
+    match = re.fullmatch(r"(final_)?([0-9a-f]{32})", name)
+    if not match:
         raise HTTPException(status_code=404, detail="Not found")
-    path = GENERATED_DIR / f"{vid}.mp4"
+    path = GENERATED_DIR / f"{name}.mp4"
     if not path.exists():
         raise HTTPException(status_code=404, detail="Video not found (renders may be cleaned up on redeploy)")
-    return FileResponse(path, media_type="video/mp4", filename="rip-tribute.mp4")
+    filename = "rip-tribute-final.mp4" if match.group(1) else "rip-tribute.mp4"
+    return FileResponse(path, media_type="video/mp4", filename=filename)

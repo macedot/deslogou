@@ -46,6 +46,14 @@ class PhotoError(Exception):
     pass
 
 
+class IntroError(Exception):
+    """The uploaded intro video is missing or not usable."""
+
+
+INTRO_MAX_DURATION_S = 180.0
+INTRO_MAX_BYTES = 200 * 1024 * 1024
+
+
 def _probe(path: Path) -> dict:
     out = subprocess.run(
         ["ffprobe", "-v", "error", "-show_entries",
@@ -261,3 +269,137 @@ def make_tribute(name: str, image: Path, out: Path, date: str | None = None,
     )
     annotated.unlink(missing_ok=True)
     return out
+
+
+def media_duration(path: Path) -> float:
+    return _probe_duration(Path(path))
+
+
+def validate_intro(path: Path) -> tuple[float, bool]:
+    """Verify an uploaded intro clip; return (duration, has_audio)."""
+    path = Path(path)
+    if not path.is_file() or path.stat().st_size == 0:
+        raise IntroError("Intro video upload is missing or empty.")
+    info = _probe(path)
+    video = next((s for s in info.get("streams", []) if s.get("codec_type") == "video"), None)
+    if video is None:
+        raise IntroError("Intro file has no video stream — is it a video?")
+    duration = float(info.get("format", {}).get("duration") or 0)
+    if duration < 0.5:
+        raise IntroError(f"Intro is too short ({duration:.2f}s).")
+    if duration > INTRO_MAX_DURATION_S:
+        raise IntroError(
+            f"Intro is {duration:.0f}s long; the limit is {INTRO_MAX_DURATION_S:.0f}s."
+        )
+    has_audio = any(s.get("codec_type") == "audio" for s in info.get("streams", []))
+    return duration, has_audio
+
+
+def merge_with_intro(intro: Path, tribute: Path, out: Path, gap: float = 1.0) -> float:
+    """Concatenate intro + black gap + tribute into `out`; return total duration.
+
+    The intro is normalized to 1920x1080 (scaled and padded, keeping aspect)
+    and both parts are re-encoded, so any input format works.
+    """
+    intro = Path(intro)
+    tribute = Path(tribute)
+    intro_duration, intro_has_audio = validate_intro(intro)
+    tribute_duration = _probe_duration(tribute)
+    if not 0 <= gap <= 10:
+        raise IntroError("Gap must be between 0 and 10 seconds.")
+
+    inputs = ["-i", str(intro), "-i", str(tribute)]
+    next_input = 2  # lavfi sources are appended with explicit index bookkeeping
+    filters: list[str] = []
+    vsegs: list[str] = []
+    asegs: list[str] = []
+
+    # Segment 1: intro, normalized to the tribute canvas.
+    filters.append(
+        f"[0:v]scale={FRAME_W}:{FRAME_H}:force_original_aspect_ratio=decrease,"
+        f"pad={FRAME_W}:{FRAME_H}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30000/1001,"
+        "format=yuv420p[v0]"
+    )
+    vsegs.append("[v0]")
+    if intro_has_audio:
+        filters.append(
+            "[0:a]aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[a0]"
+        )
+        asegs.append("[a0]")
+    else:
+        inputs += ["-f", "lavfi", "-i", f"anullsrc=r=48000:cl=stereo:d={intro_duration:.3f}"]
+        idx = next_input
+        next_input += 1
+        filters.append(f"[{idx}:a]aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[a0]")
+        asegs.append("[a0]")
+
+    # Segment 2: optional silent black gap.
+    if gap >= 0.05:
+        inputs += ["-f", "lavfi", "-i", f"color=c=black:s={FRAME_W}x{FRAME_H}:r=30000/1001:d={gap:.3f}"]
+        v_idx = next_input
+        next_input += 1
+        inputs += ["-f", "lavfi", "-i", f"anullsrc=r=48000:cl=stereo:d={gap:.3f}"]
+        a_idx = next_input
+        next_input += 1
+        filters.append(f"[{v_idx}:v]setsar=1,format=yuv420p[vg]")
+        filters.append(f"[{a_idx}:a]aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[ag]")
+        vsegs.append("[vg]")
+        asegs.append("[ag]")
+
+    # Segment 3: the validated tribute.
+    filters.append("[1:v]setsar=1,fps=30000/1001,format=yuv420p[vt]")
+    vsegs.append("[vt]")
+    filters.append("[1:a]aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo[at]")
+    asegs.append("[at]")
+
+    filters.append("".join(vsegs) + f"concat=n={len(vsegs)}:v=1:a=0[v]")
+    filters.append("".join(asegs) + f"concat=n={len(asegs)}:v=0:a=1[a]")
+
+    subprocess.run(
+        ["ffmpeg", "-y", "-v", "error", *inputs,
+         "-filter_complex", ";".join(filters),
+         "-map", "[v]", "-map", "[a]",
+         "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+         "-c:a", "aac", "-b:a", "192k",
+         "-movflags", "+faststart",
+         str(out)],
+        check=True,
+    )
+    return intro_duration + gap + tribute_duration
+
+
+def validate_merged(path: Path, expected_duration: float, tribute_starts_at: float) -> dict:
+    """Verify the final video: streams, total duration, and that the tribute
+    part (theme audible, photo visible) actually made it into the merge."""
+    path = Path(path)
+    info = _probe(path)
+    streams = info.get("streams", [])
+    for codec_type in ("video", "audio"):
+        if not any(s.get("codec_type") == codec_type for s in streams):
+            raise ValidationError(f"Final video has no {codec_type} stream — merge failed.")
+
+    duration = float(info.get("format", {}).get("duration") or 0)
+    if abs(duration - expected_duration) > 1.0:
+        raise ValidationError(
+            f"Final duration {duration:.2f}s differs from expected "
+            f"{expected_duration:.2f}s (intro + gap + tribute)."
+        )
+
+    window_start = min(tribute_starts_at + 2.0, max(duration - 4.0, 0.0))
+    mean_db = _mean_volume_db(path, start=window_start, span=4.0)
+    if mean_db < SILENCE_FLOOR_DB:
+        raise ValidationError(
+            f"Audio in the tribute part is silent (mean {mean_db:.1f} dB) — "
+            "the theme music did not survive the merge."
+        )
+
+    # Sample a frame 70% of the way into the tribute part, clamped before EOF.
+    at = min(tribute_starts_at + (duration - tribute_starts_at) * 0.7, max(duration - 0.5, 0.0))
+    luma = _frame_luma(path, at=at)
+    if luma < 3:
+        raise ValidationError(
+            f"Picture is black in the tribute part (mean luma {luma:.1f}/255)."
+        )
+
+    return {"duration": round(duration, 3), "audio_mean_db": round(mean_db, 1),
+            "frame_luma": round(luma, 1)}
