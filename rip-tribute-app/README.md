@@ -19,9 +19,9 @@ Built with FastAPI + Pillow + ffmpeg.
 - `tribute-prerender.mp4` — the pre-rendered black+theme template. **Not part
   of the Docker image**; mounted into the container at runtime
   (`PRERENDER_PATH`).
-- `intro.mp4` — the provided intro clip placed **before** the tribute (news
-  clip with the WhatsApp voice note as its only audio). Also mounted at
-  runtime (`INTRO_PATH`).
+- `intro.mp4` — the provided intro clip placed **before** the tribute: news
+  clip with its original audio (faded out at the end) plus the WhatsApp voice
+  note overlaid from 1s. Also mounted at runtime (`INTRO_PATH`).
 - `rip-tribute-app/` — the service (built by `Dockerfile` and the GitHub
   Action, which publishes the image to `ghcr.io/macedot/deslogou`).
 - `docker-compose.yml` — wires image + template + intro + video storage.
