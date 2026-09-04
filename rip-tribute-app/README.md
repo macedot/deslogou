@@ -40,13 +40,25 @@ PRERENDER_PATH=../tribute-prerender.mp4 .venv/bin/uvicorn app.main:app --port 80
 | Endpoint | Body | Result |
 |---|---|---|
 | `POST /api/lookup` | `{"name": "Chico Anysio"}` | `{name, photo_url, page_url, lang}` |
-| `POST /api/render` | `{"name": "...", "date": "DD/MM/YYYY?", "photo_url": "...?", "fade": 1.5?}` | `{video_url, file}` |
+| `POST /api/render` | `{"name": "...", "date": "DD/MM/YYYY?", "photo_url": "...?", "fade": 1.5?}` | `{video_url, file, duration, audio_mean_db, frame_luma, validated: true}` |
 | `GET /video/{id}.mp4` | — | the rendered mp4 |
 
 `photo_url` is optional; when omitted the server looks the photo up on
 Wikipedia (pt first, then en). When provided it must be an
 `upload.wikimedia.org` URL — this keeps the server from being tricked into
 fetching internal addresses (SSRF).
+
+### Validation guarantees
+
+Renders are verified twice; a file that fails either check is deleted, never
+served, and the API returns a 500 explaining why:
+
+- **Template (before rendering)** — `PRERENDER_PATH` must exist and be a
+  1920x1080 mp4 containing *both* a video and an audio stream.
+- **Output (after rendering)** — the finished file must have both streams,
+  match the template's duration (±0.5s), have audible theme music
+  (mean volume above −60 dB in the post-dissolve window), and a non-black
+  picture (the photo overlay actually happened).
 
 ## Environment
 

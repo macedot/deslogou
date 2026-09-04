@@ -68,6 +68,11 @@ def render_video(req: RenderRequest) -> dict:
         except Exception as exc:
             raise HTTPException(status_code=502, detail=f"Wikipedia lookup failed: {exc}") from exc
 
+    try:
+        expected_duration = render.validate_template(render.PRERENDER)
+    except render.TemplateError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
     with tempfile.TemporaryDirectory() as tmp:
         try:
             photo = render.download_photo(photo_url, tmp)
@@ -76,12 +81,15 @@ def render_video(req: RenderRequest) -> dict:
         out = GENERATED_DIR / f"{uuid.uuid4().hex}.mp4"
         try:
             render.make_tribute(req.name.strip(), photo, out, date=req.date or _today(), fade=req.fade)
-        except render.PhotoError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            checks = render.validate_output(out, expected_duration)
+        except (render.TemplateError, render.ValidationError) as exc:
+            out.unlink(missing_ok=True)
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
         except Exception as exc:
+            out.unlink(missing_ok=True)
             raise HTTPException(status_code=500, detail=f"Render failed: {exc}") from exc
 
-    return {"video_url": f"/video/{out.stem}.mp4", "file": out.name}
+    return {"video_url": f"/video/{out.stem}.mp4", "file": out.name, "validated": True, **checks}
 
 
 @app.get("/video/{vid}.mp4")
