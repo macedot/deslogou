@@ -1,0 +1,5 @@
+.DS_Store
+**/__pycache__/
+*.pyc
+rip-tribute-app/.venv/
+rip-tribute-app/generated/

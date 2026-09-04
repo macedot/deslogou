@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RIP Tribute</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: #0d0d0f; color: #e8e6e3;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .card {
+    width: min(480px, 92vw); padding: 32px; border-radius: 14px;
+    background: #17171b; border: 1px solid #2a2a30;
+  }
+  h1 { margin: 0 0 4px; font-size: 26px; font-weight: 600; letter-spacing: .5px; }
+  .sub { margin: 0 0 24px; color: #9a97a0; font-size: 14px; }
+  label { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: #9a97a0; margin: 14px 0 6px; }
+  input {
+    width: 100%; padding: 11px 12px; border-radius: 8px; font-size: 15px;
+    background: #0d0d0f; border: 1px solid #34343c; color: #e8e6e3;
+  }
+  input:focus { outline: none; border-color: #6c6c78; }
+  .row { display: flex; gap: 10px; margin-top: 22px; }
+  button {
+    flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #34343c;
+    background: #232329; color: #e8e6e3; font-size: 15px; cursor: pointer;
+  }
+  button:hover:not(:disabled) { background: #2d2d35; }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.primary { background: #3b3b46; border-color: #4a4a58; font-weight: 600; }
+  #preview { display: none; margin-top: 20px; text-align: center; }
+  #preview img {
+    max-width: 100%; max-height: 260px; border-radius: 10px;
+    border: 1px solid #2a2a30;
+  }
+  #preview .src { display: block; margin-top: 8px; font-size: 12px; }
+  #preview .src a { color: #8ab4f8; text-decoration: none; }
+  #status { margin-top: 14px; font-size: 14px; min-height: 20px; }
+  #status.error { color: #f28b82; }
+  #result { display: none; margin-top: 20px; }
+  #result video { width: 100%; border-radius: 10px; border: 1px solid #2a2a30; }
+  #result a { display: inline-block; margin-top: 10px; color: #8ab4f8; font-size: 14px; text-decoration: none; }
+  .spinner {
+    display: inline-block; width: 14px; height: 14px; vertical-align: -2px; margin-right: 6px;
+    border: 2px solid #555; border-top-color: #bbb; border-radius: 50%;
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>RIP Tribute</h1>
+  <p class="sub">Type a person's name — get a memorial video with their photo and a sad theme.</p>
+
+  <label for="name">Person's name</label>
+  <input id="name" placeholder="e.g. Chico Anysio" autocomplete="off">
+  <label for="date">Date (optional)</label>
+  <input id="date" placeholder="DD/MM/YYYY — defaults to today" autocomplete="off">
+
+  <div class="row">
+    <button id="findBtn">Find photo</button>
+    <button id="renderBtn" class="primary">Generate video</button>
+  </div>
+
+  <div id="preview">
+    <img id="photo" alt="Person's photo">
+    <span class="src" id="src"></span>
+  </div>
+
+  <div id="status"></div>
+
+  <div id="result">
+    <video id="player" controls></video>
+    <a id="download" download="rip-tribute.mp4">Download video</a>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const name = $("name"), date = $("date");
+const findBtn = $("findBtn"), renderBtn = $("renderBtn");
+const preview = $("preview"), photo = $("photo"), src = $("src");
+const status = $("status"), result = $("result"), player = $("player"), download = $("download");
+let photoUrl = null;
+
+function setStatus(msg, isError = false, busy = false) {
+  status.className = isError ? "error" : "";
+  status.innerHTML = busy ? `<span class="spinner"></span>${msg}` : msg;
+}
+
+async function api(path, body) {
+  const resp = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(data.detail || resp.statusText);
+  return data;
+}
+
+findBtn.addEventListener("click", async () => {
+  if (name.value.trim().length < 2) { setStatus("Type a name first.", true); return; }
+  findBtn.disabled = renderBtn.disabled = true;
+  photoUrl = null; preview.style.display = "none"; result.style.display = "none";
+  setStatus("Searching Wikipedia...", false, true);
+  try {
+    const found = await api("/api/lookup", { name: name.value });
+    photoUrl = found.photo_url;
+    photo.src = photoUrl;
+    src.innerHTML = found.page_url
+      ? `from <a href="${found.page_url}" target="_blank" rel="noopener">Wikipedia (${found.lang})</a>`
+      : `from Wikipedia (${found.lang})`;
+    preview.style.display = "block";
+    setStatus("");
+  } catch (err) {
+    setStatus(err.message, true);
+  } finally {
+    findBtn.disabled = renderBtn.disabled = false;
+  }
+});
+
+renderBtn.addEventListener("click", async () => {
+  if (name.value.trim().length < 2) { setStatus("Type a name first.", true); return; }
+  findBtn.disabled = renderBtn.disabled = true;
+  result.style.display = "none";
+  setStatus("Rendering video...", false, true);
+  try {
+    const body = { name: name.value };
+    if (date.value.trim()) body.date = date.value.trim();
+    if (photoUrl) body.photo_url = photoUrl;
+    const done = await api("/api/render", body);
+    player.src = done.video_url;
+    download.href = done.video_url;
+    result.style.display = "block";
+    player.play().catch(() => {});
+    setStatus("");
+  } catch (err) {
+    setStatus(err.message, true);
+  } finally {
+    findBtn.disabled = renderBtn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
