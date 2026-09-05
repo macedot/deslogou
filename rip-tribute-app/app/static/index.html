@@ -26,6 +26,12 @@
   }
   input:focus { outline: none; border-color: #6c6c78; }
   input[type="file"] { padding: 8px; font-size: 13px; }
+  input:disabled { opacity: .45; }
+  .check {
+    display: flex; align-items: center; gap: 8px; margin: 12px 0 0;
+    font-size: 13px; color: #e8e6e3; cursor: pointer; user-select: none;
+  }
+  .check input { width: auto; margin: 0; accent-color: #8ab4f8; }
   .row { display: flex; gap: 10px; margin-top: 16px; }
   button {
     flex: 1; padding: 12px; border-radius: 8px; border: 1px solid #34343c;
@@ -67,6 +73,10 @@
   <input id="name" placeholder="e.g. Chico Anysio" autocomplete="off">
   <label for="date">Date for the caption (optional)</label>
   <input id="date" placeholder="DD/MM/YYYY — defaults to today" autocomplete="off">
+  <label class="check" for="caption">
+    <input type="checkbox" id="caption" checked>
+    Show the caption text (RIP: name date)
+  </label>
   <div class="row">
     <button id="findBtn">1 · Search photo</button>
   </div>
@@ -106,7 +116,7 @@
 
 <script>
 const $ = id => document.getElementById(id);
-const name = $("name"), date = $("date");
+const name = $("name"), date = $("date"), captionCb = $("caption");
 const findBtn = $("findBtn"), renderBtn = $("renderBtn");
 const preview = $("preview"), photo = $("photo"), src = $("src");
 const altPhoto = $("altPhoto"), photoUrl = $("photoUrl"), photoFile = $("photoFile");
@@ -194,6 +204,9 @@ photoFile.addEventListener("change", () => {
   }
 });
 
+// The date only feeds the caption, so it is moot when the caption is off.
+captionCb.addEventListener("change", () => { date.disabled = !captionCb.checked; });
+
 renderBtn.addEventListener("click", async () => {
   if (name.value.trim().length < 2) { setStatus("Type a name first.", true); return; }
   findBtn.disabled = renderBtn.disabled = true;
@@ -202,7 +215,8 @@ renderBtn.addEventListener("click", async () => {
   try {
     const form = new FormData();
     form.append("name", name.value);
-    if (date.value.trim()) form.append("date", date.value.trim());
+    form.append("caption", captionCb.checked);
+    if (captionCb.checked && date.value.trim()) form.append("date", date.value.trim());
     const chosen = chosenPhoto();
     if (chosen && chosen.file) form.append("photo", chosen.file);
     else if (chosen && chosen.url) form.append("photo_url", chosen.url);

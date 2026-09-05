@@ -84,11 +84,13 @@ async def render_video(
     date: str | None = Form(None),
     photo_url: str | None = Form(None),
     fade: float = Form(1.5),
+    caption: bool = Form(True),
     photo: UploadFile | None = File(None),
 ) -> dict:
     """Render the tribute and merge it after the provided intro.
 
     Photo source order: uploaded file, then photo_url, then Wikipedia lookup.
+    `caption` false skips the "RIP: name date" text on the photo.
     """
     name = name.strip()
     if not 2 <= len(name) <= 120:
@@ -136,7 +138,8 @@ async def render_video(
         tribute = GENERATED_DIR / f"{uuid.uuid4().hex}.mp4"
         final = GENERATED_DIR / f"final_{uuid.uuid4().hex}.mp4"
         try:
-            render.make_tribute(name, photo_path, tribute, date=date or _today(), fade=fade)
+            render.make_tribute(name, photo_path, tribute, date=date or _today(),
+                                fade=fade, caption=caption)
             t_checks = render.validate_output(tribute, expected_duration)
             total = render.merge_with_intro(render.INTRO_PATH, tribute, final, gap=MERGE_GAP)
             f_checks = render.validate_merged(

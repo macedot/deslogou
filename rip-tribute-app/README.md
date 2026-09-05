@@ -6,11 +6,11 @@ video. The flow is two numbered buttons:
 1. **SEARCH PHOTO** — finds the person's photo on Wikipedia (pt, then en).
    After the search — success or not — a custom photo can be supplied via
    **URL or file upload**.
-2. **RENDER** — renders the tribute (photo crossfade, caption
-   "RIP: \<Name\> \<date\>", sad Chaves theme over the pre-rendered template)
-   and then **automatically merges it after the provided intro clip** with a
-   configurable gap. Both the tribute and the final video are validated and
-   returned.
+2. **RENDER** — renders the tribute (photo crossfade, optional caption
+   "RIP: \<Name\> \<date\>" via a checkbox, sad Chaves theme over the
+   pre-rendered template) and then **automatically merges it after the
+   provided intro clip** with a configurable gap. Both the tribute and the
+   final video are validated and returned.
 
 Built with FastAPI + Pillow + ffmpeg.
 
@@ -51,7 +51,7 @@ PRERENDER_PATH=../tribute-prerender.mp4 INTRO_PATH=../intro.mp4 \
 | Endpoint | Body | Result |
 |---|---|---|
 | `POST /api/lookup` | JSON `{"name": "Chico Anysio"}` | `{name, photo_url, page_url, lang}` |
-| `POST /api/render` | multipart: `name`, `date?` (DD/MM/YYYY), `photo_url?`, `fade?` (s), `photo?` (image file) | `{tribute: {...}, final: {...}, validated: true}` — each of `tribute`/`final` carries `video_url`, `file`, `duration`, `audio_mean_db`, `frame_luma` |
+| `POST /api/render` | multipart: `name`, `date?` (DD/MM/YYYY), `caption?` (bool, default true — false skips the RIP text), `photo_url?`, `fade?` (s), `photo?` (image file) | `{tribute: {...}, final: {...}, validated: true}` — each of `tribute`/`final` carries `video_url`, `file`, `duration`, `audio_mean_db`, `frame_luma` |
 | `GET /video/{id}.mp4` | — | tribute (`{id}`) or final (`final_{id}`) mp4 |
 | `GET /api/version` | — | `{version, template_ok, intro_ok}` — deployment identity |
 

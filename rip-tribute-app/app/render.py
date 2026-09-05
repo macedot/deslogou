@@ -231,33 +231,36 @@ def _assert_public_url(url: str) -> None:
             raise PhotoError("Photo URL points to a private address.")
 
 
-def _annotate(image_path: Path, caption: str) -> Path:
-    """Scale photo to fit 1920x1080, burn the caption onto its bottom edge."""
+def _annotate(image_path: Path, caption: str | None) -> Path:
+    """Scale photo to fit 1920x1080; burn the caption onto its bottom edge
+    when one is given."""
     img = Image.open(image_path)
     img = ImageOps.exif_transpose(img).convert("RGB")
     scale = min(FRAME_W / img.width, FRAME_H / img.height)
     w = round(img.width * scale / 2) * 2
     h = round(img.height * scale / 2) * 2
     img = img.resize((w, h), Image.LANCZOS)
-    draw = ImageDraw.Draw(img, "RGBA")
 
-    font_path = _find_font()
-    size, pad, margin = 48, 18, 60
-    font = ImageFont.truetype(font_path, size)
-    max_text_w = w - 2 * pad - 40
-    while size > 20:
-        bbox = draw.textbbox((0, 0), caption, font=font)
-        if bbox[2] - bbox[0] <= max_text_w:
-            break
-        size -= 2
+    if caption:
+        draw = ImageDraw.Draw(img, "RGBA")
+
+        font_path = _find_font()
+        size, pad, margin = 48, 18, 60
         font = ImageFont.truetype(font_path, size)
+        max_text_w = w - 2 * pad - 40
+        while size > 20:
+            bbox = draw.textbbox((0, 0), caption, font=font)
+            if bbox[2] - bbox[0] <= max_text_w:
+                break
+            size -= 2
+            font = ImageFont.truetype(font_path, size)
 
-    bbox = draw.textbbox((0, 0), caption, font=font)
-    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
-    x = (w - tw) // 2
-    y = h - th - margin
-    draw.rectangle([x - pad, y - pad, x + tw + pad, y + th + pad], fill=(0, 0, 0, 140))
-    draw.text((x, y), caption, font=font, fill=(255, 255, 255, 255))
+        bbox = draw.textbbox((0, 0), caption, font=font)
+        tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+        x = (w - tw) // 2
+        y = h - th - margin
+        draw.rectangle([x - pad, y - pad, x + tw + pad, y + th + pad], fill=(0, 0, 0, 140))
+        draw.text((x, y), caption, font=font, fill=(255, 255, 255, 255))
 
     tmp = Path(tempfile.mkstemp(suffix=".png")[1])
     img.convert("RGBA").save(tmp)
@@ -265,14 +268,17 @@ def _annotate(image_path: Path, caption: str) -> Path:
 
 
 def make_tribute(name: str, image: Path, out: Path, date: str | None = None,
-                 fade: float = 1.5, prerender: Path | None = None) -> Path:
+                 fade: float = 1.5, prerender: Path | None = None,
+                 caption: bool = True) -> Path:
     if not 0.2 <= fade <= 5:
         raise ValueError("fade must be between 0.2 and 5 seconds")
     prerender = Path(prerender or PRERENDER)
     validate_template(prerender)
-    date = date or datetime.datetime.now().strftime("%d/%m/%Y")
-    caption = f"RIP: {name} {date}"
-    annotated = _annotate(Path(image), caption)
+    caption_text = None
+    if caption:
+        date = date or datetime.datetime.now().strftime("%d/%m/%Y")
+        caption_text = f"RIP: {name} {date}"
+    annotated = _annotate(Path(image), caption_text)
     duration = _probe_duration(prerender)
     subprocess.run(
         [
